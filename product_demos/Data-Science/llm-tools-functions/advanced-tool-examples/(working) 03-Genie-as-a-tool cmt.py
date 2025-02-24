@@ -353,6 +353,63 @@ databricks_token = '<token>' #gitleaks:allow
 
 # COMMAND ----------
 
+# MAGIC %md ## Secret
+
+# COMMAND ----------
+
+import time
+
+from databricks.sdk import WorkspaceClient
+
+w = WorkspaceClient()
+
+key_name = 'token_01_28_25'
+
+scope_name = 'yevtushenko_tokens'
+
+secret_value = '<token>' #gitleaks:allow
+
+w.secrets.create_scope(scope=scope_name)
+
+w.secrets.put_secret(scope=scope_name, key=key_name, string_value=secret_value)
+
+# cleanup
+# w.secrets.delete_secret(scope=scope_name, key=key_name)
+# w.secrets.delete_scope(scope=scope_name)
+
+# COMMAND ----------
+
+[i.name for i in w.secrets.list_scopes() if 'yevtushenko' in i.name]
+
+# COMMAND ----------
+
+w.secrets.get_secret(scope='yevtushenko_tokens', key='token_01_28_25').value
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC CREATE FUNCTION yevtushenko_artem.dbdemos_agent_tools.get_pat()
+# MAGIC   RETURNS STRING
+# MAGIC   LANGUAGE PYTHON
+# MAGIC   AS $$
+# MAGIC     from databricks.sdk import WorkspaceClient
+# MAGIC     w = WorkspaceClient()
+# MAGIC     pat = w.secrets.get_secret(scope='yevtushenko_tokens', key='token_01_28_25').value
+# MAGIC     return pat
+# MAGIC   $$
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC select try_secret('yevtushenko_tokens', 'token_01_28_25')
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC select yevtushenko_artem.dbdemos_agent_tools.get_pat()
+
+# COMMAND ----------
+
 # MAGIC %sql
 # MAGIC use catalog yevtushenko_artem;
 # MAGIC use schema dbdemos_agent_tools;
@@ -360,14 +417,14 @@ databricks_token = '<token>' #gitleaks:allow
 # COMMAND ----------
 
 workspace = 'https://e2-demo-field-eng.cloud.databricks.com/'
-genie_room_id = '01ef964bc68d14c5b8037d3a5e7fc3df'
-purpose = 'historical snow conditions for skiing and snowboard resort data'
-user_token = '<token>' #gitleaks:allow
+genie_room_id = '01efb3a0a88e15f998c3db34435f2c27'
+purpose = 'cambridge mobile telematics api data about trips and crashes'
+user_token = '<token>'
 
 # COMMAND ----------
 
 function_definition = f"""
-CREATE OR REPLACE FUNCTION chat_with_snowboard_expert(question STRING COMMENT "the question to ask about {purpose}",
+CREATE OR REPLACE FUNCTION chat_with_trip_telemetry_expert(question STRING COMMENT "the question to ask about {purpose}",
         contextual_history STRING COMMENT "provide relavant history to be able to answer this question, assume genie doesnt keep track of history. Use 'no relevant history' if there is nothing relevant to answer the question.")
 RETURNS STRING
 LANGUAGE SQL
@@ -375,6 +432,27 @@ COMMENT 'This is a agent that you can converse with to get answers to questions 
 RETURN SELECT _genie_query(
   '{workspace}',
   '{user_token}',
+  '{genie_room_id}',
+  question,
+  contextual_history
+);
+"""
+
+print(function_definition)
+
+spark.sql(function_definition)
+
+# COMMAND ----------
+
+function_definition = f"""
+CREATE OR REPLACE FUNCTION chat_with_trip_telemetry_expert(question STRING COMMENT "the question to ask about {purpose}",
+        contextual_history STRING COMMENT "provide relavant history to be able to answer this question, assume genie doesnt keep track of history. Use 'no relevant history' if there is nothing relevant to answer the question.")
+RETURNS STRING
+LANGUAGE SQL
+COMMENT 'This is a agent that you can converse with to get answers to questions about {purpose}. Try to provide simple questions and provide history if you had prior conversations.' 
+RETURN SELECT _genie_query(
+  '{workspace}',
+  try_secret('yevtushenko_tokens', 'token_01_28_25'),
   '{genie_room_id}',
   question,
   contextual_history
